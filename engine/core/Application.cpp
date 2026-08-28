@@ -4,7 +4,6 @@
 
 Application::Application()
     : window(nullptr),
-      renderer(nullptr),
       running(false),
       lastFrameTime(0)
 {
@@ -17,7 +16,9 @@ Application::~Application()
 
 bool Application::Initialize()
 {
-    std::cout << "Initializing Arena Engine..." << std::endl;
+    std::cout
+        << "Initializing Arena Engine..."
+        << std::endl;
 
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -46,23 +47,19 @@ bool Application::Initialize()
         return false;
     }
 
-    renderer = SDL_CreateRenderer(window, nullptr);
-
-    if (!renderer)
+    if (!renderer.Initialize(window))
     {
-        std::cerr
-            << "Renderer creation failed: "
-            << SDL_GetError()
-            << std::endl;
-
         return false;
     }
 
     running = true;
 
-    lastFrameTime = SDL_GetPerformanceCounter();
+    lastFrameTime =
+        SDL_GetPerformanceCounter();
 
-    std::cout << "Engine initialized successfully." << std::endl;
+    std::cout
+        << "Engine initialized successfully."
+        << std::endl;
 
     return true;
 }
@@ -71,14 +68,18 @@ void Application::Run()
 {
     while (running)
     {
-        Uint64 currentFrameTime = SDL_GetPerformanceCounter();
+        Uint64 currentFrameTime =
+            SDL_GetPerformanceCounter();
 
         double frequency =
-            static_cast<double>(SDL_GetPerformanceFrequency());
+            static_cast<double>(
+                SDL_GetPerformanceFrequency()
+            );
 
         float deltaTime =
             static_cast<float>(
-                (currentFrameTime - lastFrameTime) / frequency
+                (currentFrameTime - lastFrameTime)
+                / frequency
             );
 
         lastFrameTime = currentFrameTime;
@@ -104,34 +105,45 @@ void Application::ProcessInput()
 
 void Application::Update(float deltaTime)
 {
-    std::cout
-        << "Delta Time: "
-        << deltaTime
-        << std::endl;
+    (void)deltaTime;
 }
 
 void Application::Render()
 {
-    SDL_SetRenderDrawColor(
-        renderer,
-        20,
-        20,
-        30,
+    renderer.BeginFrame();
+
+    renderer.SetDrawColor(
+        255,
+        255,
         255
     );
 
-    SDL_RenderClear(renderer);
+    renderer.FillRectangle(
+        540.0f,
+        300.0f,
+        200.0f,
+        120.0f
+    );
 
-    SDL_RenderPresent(renderer);
+    renderer.SetDrawColor(
+        200,
+        50,
+        50
+    );
+
+    renderer.FillRectangle(
+        100.0f,
+        100.0f,
+        80.0f,
+        80.0f
+    );
+
+    renderer.EndFrame();
 }
 
 void Application::Shutdown()
 {
-    if (renderer)
-    {
-        SDL_DestroyRenderer(renderer);
-        renderer = nullptr;
-    }
+    renderer.Shutdown();
 
     if (window)
     {

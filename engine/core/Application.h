@@ -2,6 +2,8 @@
 
 #include <SDL3/SDL.h>
 
+#include "engine/renderer/Renderer.h"
+
 class Application
 {
 public:
@@ -19,9 +21,8 @@ private:
 
 private:
     SDL_Window* window;
-    SDL_Renderer* renderer;
+    Renderer renderer;
 
     bool running;
-
     Uint64 lastFrameTime;
 };

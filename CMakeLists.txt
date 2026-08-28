@@ -15,6 +15,7 @@ add_subdirectory(vendored/SDL EXCLUDE_FROM_ALL)
 add_executable(ArenaGame
     game/main.cpp
     engine/core/Application.cpp
+    engine/renderer/Renderer.cpp
 )
 
 target_include_directories(ArenaGame
