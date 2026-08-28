@@ -29,6 +29,9 @@ add_executable(
     engine/physics/Physics.cpp
     engine/resources/TextureManager.cpp
     engine/world/Camera.cpp
+    engine/arena/ArenaManager.cpp
+    engine/audio/AudioSystem.cpp
+    engine/effects/GameFeel.cpp
 )
 
 target_include_directories(
