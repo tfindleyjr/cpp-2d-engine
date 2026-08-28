@@ -8,6 +8,7 @@
 #include "engine/arena/ArenaManager.h"
 #include "engine/audio/AudioSystem.h"
 #include "engine/core/GameState.h"
+#include "engine/debug/EngineDiagnostics.h"
 #include "engine/effects/GameFeel.h"
 #include "engine/ecs/Registry.h"
 #include "engine/input/Input.h"
@@ -45,7 +46,16 @@ private:
     void RenderGrid(float shakeX, float shakeY);
     void RenderWorld(float shakeX, float shakeY);
     void RenderUI();
+    void RenderDebug(float shakeX, float shakeY);
     void UpdateWindowTitle();
+
+    bool IsWorldRectVisible(
+        float x,
+        float y,
+        float width,
+        float height,
+        float margin = 32.0f
+    ) const;
 
 private:
     static constexpr float ScreenWidth = 1280.0f;
@@ -63,6 +73,7 @@ private:
     ArenaManager arena;
     AudioSystem audio;
     GameFeel gameFeel;
+    EngineDiagnostics diagnostics;
 
     Entity player;
     Entity obstacle;
