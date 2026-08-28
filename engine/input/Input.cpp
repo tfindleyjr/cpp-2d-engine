@@ -30,3 +30,23 @@ bool Input::IsKeyDown(SDL_Scancode key) const
 
     return keyboardState[key];
 }
+
+bool Input::IsMouseButtonDown(Uint32 buttonMask) const
+{
+    float mouseX = 0.0f;
+    float mouseY = 0.0f;
+
+    const Uint32 buttons = static_cast<Uint32>(
+        SDL_GetMouseState(&mouseX, &mouseY)
+    );
+
+    return (buttons & buttonMask) != 0;
+}
+
+void Input::GetMousePosition(
+    float& x,
+    float& y
+) const
+{
+    SDL_GetMouseState(&x, &y);
+}

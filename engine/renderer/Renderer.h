@@ -35,6 +35,13 @@ public:
         float height
     );
 
+    void DrawLine(
+        float x1,
+        float y1,
+        float x2,
+        float y2
+    );
+
     void DrawTexture(
         SDL_Texture* texture,
         const SDL_FRect* source,

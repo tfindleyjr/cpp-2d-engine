@@ -16,11 +16,10 @@ bool Renderer::Initialize(
     SDL_Window* window
 )
 {
-    renderer =
-        SDL_CreateRenderer(
-            window,
-            nullptr
-        );
+    renderer = SDL_CreateRenderer(
+        window,
+        nullptr
+    );
 
     if (!renderer)
     {
@@ -122,6 +121,22 @@ void Renderer::FillRectangle(
     );
 }
 
+void Renderer::DrawLine(
+    float x1,
+    float y1,
+    float x2,
+    float y2
+)
+{
+    SDL_RenderLine(
+        renderer,
+        x1,
+        y1,
+        x2,
+        y2
+    );
+}
+
 void Renderer::DrawTexture(
     SDL_Texture* texture,
     const SDL_FRect* source,
@@ -141,8 +156,7 @@ void Renderer::DrawTexture(
     );
 }
 
-SDL_Renderer*
-Renderer::GetSDLRenderer()
+SDL_Renderer* Renderer::GetSDLRenderer()
 {
     return renderer;
 }
