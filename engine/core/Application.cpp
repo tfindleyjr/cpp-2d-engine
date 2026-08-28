@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <unordered_set>
@@ -87,7 +88,8 @@ bool Application::Initialize()
 
     std::cout << "Engine initialized successfully." << std::endl;
     std::cout
-        << "Controls: WASD move, mouse aim, left click shoot, P pause, R restart after death, ESC quit."
+        << "Controls: WASD move, mouse aim, left click shoot, P pause, "
+        << "R restart after death, F1 diagnostics, F2 colliders, F3 grid, ESC quit."
         << std::endl;
 
     return true;
@@ -210,6 +212,13 @@ void Application::Run()
         lastFrameTime = currentFrameTime;
         deltaTime = std::min(deltaTime, 0.05f);
 
+        diagnostics.Update(
+            deltaTime,
+            registry.AliveCount(),
+            bullets.size(),
+            enemies.size()
+        );
+
         ProcessInput();
         Update(deltaTime);
         Render();
@@ -224,6 +233,21 @@ void Application::ProcessInput()
     {
         running = false;
         return;
+    }
+
+    if (input.WasKeyPressed(SDL_SCANCODE_F1))
+    {
+        diagnostics.ToggleEnabled();
+    }
+
+    if (input.WasKeyPressed(SDL_SCANCODE_F2))
+    {
+        diagnostics.ToggleColliders();
+    }
+
+    if (input.WasKeyPressed(SDL_SCANCODE_F3))
+    {
+        diagnostics.ToggleGrid();
     }
 
     if (
@@ -811,6 +835,26 @@ void Application::UpdatePlayerAnimation(float deltaTime)
     }
 }
 
+bool Application::IsWorldRectVisible(
+    float x,
+    float y,
+    float width,
+    float height,
+    float margin
+) const
+{
+    const float left = camera.GetX() - margin;
+    const float top = camera.GetY() - margin;
+    const float right = camera.GetX() + ScreenWidth + margin;
+    const float bottom = camera.GetY() + ScreenHeight + margin;
+
+    return
+        x + width >= left &&
+        x <= right &&
+        y + height >= top &&
+        y <= bottom;
+}
+
 void Application::RenderGrid(float shakeX, float shakeY)
 {
     constexpr float gridSize = 100.0f;
@@ -853,7 +897,16 @@ void Application::RenderWorld(float shakeX, float shakeY)
     TransformComponent* obstacleTransform = registry.GetTransform(obstacle);
     ColliderComponent* obstacleCollider = registry.GetCollider(obstacle);
 
-    if (obstacleTransform && obstacleCollider)
+    if (
+        obstacleTransform &&
+        obstacleCollider &&
+        IsWorldRectVisible(
+            obstacleTransform->x,
+            obstacleTransform->y,
+            obstacleCollider->width,
+            obstacleCollider->height
+        )
+    )
     {
         renderer.SetDrawColor(80, 80, 100);
         renderer.FillRectangle(
@@ -871,7 +924,16 @@ void Application::RenderWorld(float shakeX, float shakeY)
         TransformComponent* transform = registry.GetTransform(bullet);
         ColliderComponent* collider = registry.GetCollider(bullet);
 
-        if (transform && collider)
+        if (
+            transform &&
+            collider &&
+            IsWorldRectVisible(
+                transform->x,
+                transform->y,
+                collider->width,
+                collider->height
+            )
+        )
         {
             renderer.FillRectangle(
                 camera.WorldToScreenX(transform->x) + shakeX,
@@ -889,6 +951,17 @@ void Application::RenderWorld(float shakeX, float shakeY)
         HealthComponent* health = registry.GetHealth(enemy);
 
         if (!transform || !collider)
+        {
+            continue;
+        }
+
+        if (!IsWorldRectVisible(
+                transform->x,
+                transform->y,
+                collider->width,
+                collider->height,
+                48.0f
+            ))
         {
             continue;
         }
@@ -986,6 +1059,75 @@ void Application::RenderWorld(float shakeX, float shakeY)
             playerCollider->height
         );
     }
+}
+
+void Application::RenderDebug(float shakeX, float shakeY)
+{
+    if (!diagnostics.ShowColliders())
+    {
+        return;
+    }
+
+    renderer.SetDrawColor(70, 225, 235);
+
+    const auto drawCollider = [this, shakeX, shakeY](
+        Entity entity,
+        float margin
+    )
+    {
+        TransformComponent* transform = registry.GetTransform(entity);
+        ColliderComponent* collider = registry.GetCollider(entity);
+
+        if (!transform || !collider)
+        {
+            return;
+        }
+
+        if (!IsWorldRectVisible(
+                transform->x,
+                transform->y,
+                collider->width,
+                collider->height,
+                margin
+            ))
+        {
+            return;
+        }
+
+        renderer.DrawRectangle(
+            camera.WorldToScreenX(transform->x) + shakeX,
+            camera.WorldToScreenY(transform->y) + shakeY,
+            collider->width,
+            collider->height
+        );
+    };
+
+    drawCollider(player, 64.0f);
+    drawCollider(obstacle, 64.0f);
+
+    for (Entity bullet : bullets)
+    {
+        drawCollider(bullet, 32.0f);
+    }
+
+    for (Entity enemy : enemies)
+    {
+        drawCollider(enemy, 64.0f);
+    }
+
+    renderer.SetDrawColor(110, 180, 255);
+    renderer.DrawLine(
+        ScreenWidth * 0.5f - 10.0f,
+        ScreenHeight * 0.5f,
+        ScreenWidth * 0.5f + 10.0f,
+        ScreenHeight * 0.5f
+    );
+    renderer.DrawLine(
+        ScreenWidth * 0.5f,
+        ScreenHeight * 0.5f - 10.0f,
+        ScreenWidth * 0.5f,
+        ScreenHeight * 0.5f + 10.0f
+    );
 }
 
 void Application::RenderUI()
@@ -1092,8 +1234,13 @@ void Application::Render()
     const float shakeX = gameFeel.GetShakeX();
     const float shakeY = gameFeel.GetShakeY();
 
-    RenderGrid(shakeX, shakeY);
+    if (diagnostics.ShowGrid())
+    {
+        RenderGrid(shakeX, shakeY);
+    }
+
     RenderWorld(shakeX, shakeY);
+    RenderDebug(shakeX, shakeY);
     RenderUI();
 
     renderer.EndFrame();
@@ -1122,6 +1269,24 @@ void Application::UpdateWindowTitle()
         << enemies.size()
         << " | Score "
         << score;
+
+    if (diagnostics.IsEnabled())
+    {
+        title
+            << std::fixed
+            << std::setprecision(1)
+            << " | FPS "
+            << diagnostics.GetFramesPerSecond()
+            << " | "
+            << diagnostics.GetAverageFrameMilliseconds()
+            << " ms"
+            << " | Entities "
+            << diagnostics.GetLiveEntities()
+            << " | Colliders "
+            << (diagnostics.ShowColliders() ? "ON" : "OFF")
+            << " | Grid "
+            << (diagnostics.ShowGrid() ? "ON" : "OFF");
+    }
 
     if (gameState == GameState::Paused)
     {
