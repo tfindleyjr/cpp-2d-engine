@@ -33,6 +33,7 @@ add_executable(
     engine/arena/ArenaManager.cpp
     engine/audio/AudioSystem.cpp
     engine/effects/GameFeel.cpp
+    engine/debug/EngineDiagnostics.cpp
 )
 
 target_include_directories(
