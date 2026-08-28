@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(ArenaEngine
-    VERSION 0.1.0
+    VERSION 1.0.0
     LANGUAGES C CXX
 )
 
@@ -48,19 +48,66 @@ target_link_libraries(
         SDL3::SDL3
 )
 
-if (MSVC)
-    target_compile_options(
-        ArenaGame
-        PRIVATE
-            /W4
-            /permissive-
+function(enable_strict_warnings target)
+    if (MSVC)
+        target_compile_options(
+            ${target}
+            PRIVATE
+                /W4
+                /permissive-
+        )
+    else()
+        target_compile_options(
+            ${target}
+            PRIVATE
+                -Wall
+                -Wextra
+                -Wpedantic
+        )
+    endif()
+endfunction()
+
+enable_strict_warnings(ArenaGame)
+
+include(CTest)
+
+if (BUILD_TESTING)
+    add_executable(
+        ArenaTests
+
+        tests/TestMain.cpp
+        engine/physics/Physics.cpp
+        engine/world/Camera.cpp
+        engine/arena/ArenaManager.cpp
     )
-else()
-    target_compile_options(
-        ArenaGame
+
+    target_include_directories(
+        ArenaTests
         PRIVATE
-            -Wall
-            -Wextra
-            -Wpedantic
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    enable_strict_warnings(ArenaTests)
+
+    add_test(
+        NAME ArenaEngineTests
+        COMMAND ArenaTests
     )
 endif()
+
+install(
+    TARGETS ArenaGame
+    RUNTIME DESTINATION bin
+)
+
+install(
+    DIRECTORY assets/
+    DESTINATION assets
+)
+
+set(CPACK_PACKAGE_NAME "ArenaEngine")
+set(CPACK_PACKAGE_VENDOR "Trenton Findley Jr.")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "C++20 SDL3 top-down arena shooter and custom 2D engine")
+set(CPACK_GENERATOR "ZIP")
+include(CPack)
