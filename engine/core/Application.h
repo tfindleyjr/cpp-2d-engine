@@ -5,6 +5,7 @@
 #include "engine/renderer/Renderer.h"
 #include "engine/input/Input.h"
 #include "engine/ecs/Registry.h"
+#include "engine/resources/TextureManager.h"
 
 class Application
 {
@@ -27,10 +28,14 @@ private:
     Renderer renderer;
     Input input;
 
+    TextureManager textureManager;
+
     Registry registry;
 
     Entity player;
+    Entity obstacle;
 
     bool running;
+
     Uint64 lastFrameTime;
 };

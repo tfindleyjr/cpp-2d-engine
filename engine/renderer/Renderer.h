@@ -35,6 +35,14 @@ public:
         float height
     );
 
+    void DrawTexture(
+        SDL_Texture* texture,
+        const SDL_FRect* source,
+        const SDL_FRect* destination
+    );
+
+    SDL_Renderer* GetSDLRenderer();
+
 private:
     SDL_Renderer* renderer;
 };

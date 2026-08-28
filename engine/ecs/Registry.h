@@ -3,8 +3,12 @@
 #include <unordered_map>
 
 #include "Entity.h"
+
 #include "components/TransformComponent.h"
 #include "components/VelocityComponent.h"
+#include "components/ColliderComponent.h"
+#include "components/SpriteComponent.h"
+#include "components/AnimationComponent.h"
 
 class Registry
 {
@@ -30,9 +34,35 @@ public:
         velocities[entity] = velocity;
     }
 
-    TransformComponent* GetTransform(Entity entity)
+    void AddCollider(
+        Entity entity,
+        const ColliderComponent& collider
+    )
     {
-        auto it = transforms.find(entity);
+        colliders[entity] = collider;
+    }
+
+    void AddSprite(
+        Entity entity,
+        const SpriteComponent& sprite
+    )
+    {
+        sprites[entity] = sprite;
+    }
+
+    void AddAnimation(
+        Entity entity,
+        const AnimationComponent& animation
+    )
+    {
+        animations[entity] = animation;
+    }
+
+    TransformComponent*
+    GetTransform(Entity entity)
+    {
+        auto it =
+            transforms.find(entity);
 
         if (it == transforms.end())
         {
@@ -42,11 +72,55 @@ public:
         return &it->second;
     }
 
-    VelocityComponent* GetVelocity(Entity entity)
+    VelocityComponent*
+    GetVelocity(Entity entity)
     {
-        auto it = velocities.find(entity);
+        auto it =
+            velocities.find(entity);
 
         if (it == velocities.end())
+        {
+            return nullptr;
+        }
+
+        return &it->second;
+    }
+
+    ColliderComponent*
+    GetCollider(Entity entity)
+    {
+        auto it =
+            colliders.find(entity);
+
+        if (it == colliders.end())
+        {
+            return nullptr;
+        }
+
+        return &it->second;
+    }
+
+    SpriteComponent*
+    GetSprite(Entity entity)
+    {
+        auto it =
+            sprites.find(entity);
+
+        if (it == sprites.end())
+        {
+            return nullptr;
+        }
+
+        return &it->second;
+    }
+
+    AnimationComponent*
+    GetAnimation(Entity entity)
+    {
+        auto it =
+            animations.find(entity);
+
+        if (it == animations.end())
         {
             return nullptr;
         }
@@ -57,9 +131,28 @@ public:
 private:
     Entity nextEntity = 0;
 
-    std::unordered_map<Entity, TransformComponent>
-        transforms;
+    std::unordered_map<
+        Entity,
+        TransformComponent
+    > transforms;
 
-    std::unordered_map<Entity, VelocityComponent>
-        velocities;
+    std::unordered_map<
+        Entity,
+        VelocityComponent
+    > velocities;
+
+    std::unordered_map<
+        Entity,
+        ColliderComponent
+    > colliders;
+
+    std::unordered_map<
+        Entity,
+        SpriteComponent
+    > sprites;
+
+    std::unordered_map<
+        Entity,
+        AnimationComponent
+    > animations;
 };
