@@ -1,159 +1,179 @@
 #pragma once
 
-#include <unordered_map>
+#include <cstddef>
+#include <unordered_set>
+#include <vector>
 
+#include "ComponentStore.h"
 #include "Entity.h"
 
+#include "components/AnimationComponent.h"
+#include "components/ColliderComponent.h"
+#include "components/EnemyComponent.h"
+#include "components/HealthComponent.h"
+#include "components/ProjectileComponent.h"
+#include "components/SpriteComponent.h"
 #include "components/TransformComponent.h"
 #include "components/VelocityComponent.h"
-#include "components/ColliderComponent.h"
-#include "components/SpriteComponent.h"
-#include "components/AnimationComponent.h"
-#include "components/ProjectileComponent.h"
-#include "components/HealthComponent.h"
-#include "components/EnemyComponent.h"
 
 class Registry
 {
 public:
+    Registry()
+    {
+        constexpr std::size_t initialCapacity = 256;
+
+        aliveEntities.reserve(initialCapacity);
+        freeEntities.reserve(initialCapacity);
+        transforms.Reserve(initialCapacity);
+        velocities.Reserve(initialCapacity);
+        colliders.Reserve(initialCapacity);
+        sprites.Reserve(initialCapacity);
+        animations.Reserve(initialCapacity);
+        projectiles.Reserve(initialCapacity);
+        health.Reserve(initialCapacity);
+        enemies.Reserve(initialCapacity);
+    }
+
     Entity CreateEntity()
     {
-        return nextEntity++;
+        Entity entity = 0;
+
+        if (!freeEntities.empty())
+        {
+            entity = freeEntities.back();
+            freeEntities.pop_back();
+        }
+        else
+        {
+            entity = nextEntity++;
+        }
+
+        aliveEntities.insert(entity);
+        return entity;
     }
 
     void DestroyEntity(Entity entity)
     {
-        transforms.erase(entity);
-        velocities.erase(entity);
-        colliders.erase(entity);
-        sprites.erase(entity);
-        animations.erase(entity);
-        projectiles.erase(entity);
-        health.erase(entity);
-        enemies.erase(entity);
+        if (aliveEntities.erase(entity) == 0)
+        {
+            return;
+        }
+
+        transforms.Remove(entity);
+        velocities.Remove(entity);
+        colliders.Remove(entity);
+        sprites.Remove(entity);
+        animations.Remove(entity);
+        projectiles.Remove(entity);
+        health.Remove(entity);
+        enemies.Remove(entity);
+
+        freeEntities.push_back(entity);
     }
 
-    void AddTransform(
-        Entity entity,
-        const TransformComponent& transform
-    )
+    bool IsAlive(Entity entity) const
     {
-        transforms[entity] = transform;
+        return aliveEntities.contains(entity);
     }
 
-    void AddVelocity(
-        Entity entity,
-        const VelocityComponent& velocity
-    )
+    std::size_t AliveCount() const
     {
-        velocities[entity] = velocity;
+        return aliveEntities.size();
     }
 
-    void AddCollider(
-        Entity entity,
-        const ColliderComponent& collider
-    )
+    void AddTransform(Entity entity, const TransformComponent& component)
     {
-        colliders[entity] = collider;
+        transforms.Add(entity, component);
     }
 
-    void AddSprite(
-        Entity entity,
-        const SpriteComponent& sprite
-    )
+    void AddVelocity(Entity entity, const VelocityComponent& component)
     {
-        sprites[entity] = sprite;
+        velocities.Add(entity, component);
     }
 
-    void AddAnimation(
-        Entity entity,
-        const AnimationComponent& animation
-    )
+    void AddCollider(Entity entity, const ColliderComponent& component)
     {
-        animations[entity] = animation;
+        colliders.Add(entity, component);
     }
 
-    void AddProjectile(
-        Entity entity,
-        const ProjectileComponent& projectile
-    )
+    void AddSprite(Entity entity, const SpriteComponent& component)
     {
-        projectiles[entity] = projectile;
+        sprites.Add(entity, component);
     }
 
-    void AddHealth(
-        Entity entity,
-        const HealthComponent& healthComponent
-    )
+    void AddAnimation(Entity entity, const AnimationComponent& component)
     {
-        health[entity] = healthComponent;
+        animations.Add(entity, component);
     }
 
-    void AddEnemy(
-        Entity entity,
-        const EnemyComponent& enemy
-    )
+    void AddProjectile(Entity entity, const ProjectileComponent& component)
     {
-        enemies[entity] = enemy;
+        projectiles.Add(entity, component);
+    }
+
+    void AddHealth(Entity entity, const HealthComponent& component)
+    {
+        health.Add(entity, component);
+    }
+
+    void AddEnemy(Entity entity, const EnemyComponent& component)
+    {
+        enemies.Add(entity, component);
     }
 
     TransformComponent* GetTransform(Entity entity)
     {
-        auto it = transforms.find(entity);
-        return it == transforms.end() ? nullptr : &it->second;
+        return transforms.Get(entity);
     }
 
     VelocityComponent* GetVelocity(Entity entity)
     {
-        auto it = velocities.find(entity);
-        return it == velocities.end() ? nullptr : &it->second;
+        return velocities.Get(entity);
     }
 
     ColliderComponent* GetCollider(Entity entity)
     {
-        auto it = colliders.find(entity);
-        return it == colliders.end() ? nullptr : &it->second;
+        return colliders.Get(entity);
     }
 
     SpriteComponent* GetSprite(Entity entity)
     {
-        auto it = sprites.find(entity);
-        return it == sprites.end() ? nullptr : &it->second;
+        return sprites.Get(entity);
     }
 
     AnimationComponent* GetAnimation(Entity entity)
     {
-        auto it = animations.find(entity);
-        return it == animations.end() ? nullptr : &it->second;
+        return animations.Get(entity);
     }
 
     ProjectileComponent* GetProjectile(Entity entity)
     {
-        auto it = projectiles.find(entity);
-        return it == projectiles.end() ? nullptr : &it->second;
+        return projectiles.Get(entity);
     }
 
     HealthComponent* GetHealth(Entity entity)
     {
-        auto it = health.find(entity);
-        return it == health.end() ? nullptr : &it->second;
+        return health.Get(entity);
     }
 
     EnemyComponent* GetEnemy(Entity entity)
     {
-        auto it = enemies.find(entity);
-        return it == enemies.end() ? nullptr : &it->second;
+        return enemies.Get(entity);
     }
 
 private:
     Entity nextEntity = 0;
 
-    std::unordered_map<Entity, TransformComponent> transforms;
-    std::unordered_map<Entity, VelocityComponent> velocities;
-    std::unordered_map<Entity, ColliderComponent> colliders;
-    std::unordered_map<Entity, SpriteComponent> sprites;
-    std::unordered_map<Entity, AnimationComponent> animations;
-    std::unordered_map<Entity, ProjectileComponent> projectiles;
-    std::unordered_map<Entity, HealthComponent> health;
-    std::unordered_map<Entity, EnemyComponent> enemies;
+    std::unordered_set<Entity> aliveEntities;
+    std::vector<Entity> freeEntities;
+
+    ComponentStore<TransformComponent> transforms;
+    ComponentStore<VelocityComponent> velocities;
+    ComponentStore<ColliderComponent> colliders;
+    ComponentStore<SpriteComponent> sprites;
+    ComponentStore<AnimationComponent> animations;
+    ComponentStore<ProjectileComponent> projectiles;
+    ComponentStore<HealthComponent> health;
+    ComponentStore<EnemyComponent> enemies;
 };

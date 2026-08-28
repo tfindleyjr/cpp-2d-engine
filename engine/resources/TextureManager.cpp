@@ -1,14 +1,22 @@
 #include "TextureManager.h"
 
 #include <iostream>
+#include <memory>
 
-TextureManager::TextureManager()
+namespace
 {
-}
+struct SDLSurfaceDeleter
+{
+    void operator()(SDL_Surface* surface) const
+    {
+        if (surface)
+        {
+            SDL_DestroySurface(surface);
+        }
+    }
+};
 
-TextureManager::~TextureManager()
-{
-    Shutdown();
+using SurfacePtr = std::unique_ptr<SDL_Surface, SDLSurfaceDeleter>;
 }
 
 bool TextureManager::LoadTexture(
@@ -17,8 +25,9 @@ bool TextureManager::LoadTexture(
     const std::string& filePath
 )
 {
-    SDL_Surface* surface =
-        SDL_LoadBMP(filePath.c_str());
+    SurfacePtr surface{
+        SDL_LoadBMP(filePath.c_str())
+    };
 
     if (!surface)
     {
@@ -32,13 +41,12 @@ bool TextureManager::LoadTexture(
         return false;
     }
 
-    SDL_Texture* texture =
+    TexturePtr texture{
         SDL_CreateTextureFromSurface(
             renderer,
-            surface
-        );
-
-    SDL_DestroySurface(surface);
+            surface.get()
+        )
+    };
 
     if (!texture)
     {
@@ -52,7 +60,10 @@ bool TextureManager::LoadTexture(
         return false;
     }
 
-    textures[id] = texture;
+    textures.insert_or_assign(
+        id,
+        std::move(texture)
+    );
 
     std::cout
         << "Loaded texture: "
@@ -66,28 +77,17 @@ SDL_Texture* TextureManager::GetTexture(
     const std::string& id
 )
 {
-    auto it =
-        textures.find(id);
+    const auto it = textures.find(id);
 
     if (it == textures.end())
     {
         return nullptr;
     }
 
-    return it->second;
+    return it->second.get();
 }
 
 void TextureManager::Shutdown()
 {
-    for (auto& pair : textures)
-    {
-        if (pair.second)
-        {
-            SDL_DestroyTexture(
-                pair.second
-            );
-        }
-    }
-
     textures.clear();
 }
