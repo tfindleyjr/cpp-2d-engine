@@ -4,6 +4,7 @@
 
 #include "engine/renderer/Renderer.h"
 #include "engine/input/Input.h"
+#include "engine/ecs/Registry.h"
 
 class Application
 {
@@ -26,10 +27,10 @@ private:
     Renderer renderer;
     Input input;
 
+    Registry registry;
+
+    Entity player;
+
     bool running;
-
     Uint64 lastFrameTime;
-
-    float playerX;
-    float playerY;
 };
