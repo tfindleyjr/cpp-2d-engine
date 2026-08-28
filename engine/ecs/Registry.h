@@ -9,6 +9,9 @@
 #include "components/ColliderComponent.h"
 #include "components/SpriteComponent.h"
 #include "components/AnimationComponent.h"
+#include "components/ProjectileComponent.h"
+#include "components/HealthComponent.h"
+#include "components/EnemyComponent.h"
 
 class Registry
 {
@@ -16,6 +19,18 @@ public:
     Entity CreateEntity()
     {
         return nextEntity++;
+    }
+
+    void DestroyEntity(Entity entity)
+    {
+        transforms.erase(entity);
+        velocities.erase(entity);
+        colliders.erase(entity);
+        sprites.erase(entity);
+        animations.erase(entity);
+        projectiles.erase(entity);
+        health.erase(entity);
+        enemies.erase(entity);
     }
 
     void AddTransform(
@@ -58,101 +73,87 @@ public:
         animations[entity] = animation;
     }
 
-    TransformComponent*
-    GetTransform(Entity entity)
+    void AddProjectile(
+        Entity entity,
+        const ProjectileComponent& projectile
+    )
     {
-        auto it =
-            transforms.find(entity);
-
-        if (it == transforms.end())
-        {
-            return nullptr;
-        }
-
-        return &it->second;
+        projectiles[entity] = projectile;
     }
 
-    VelocityComponent*
-    GetVelocity(Entity entity)
+    void AddHealth(
+        Entity entity,
+        const HealthComponent& healthComponent
+    )
     {
-        auto it =
-            velocities.find(entity);
-
-        if (it == velocities.end())
-        {
-            return nullptr;
-        }
-
-        return &it->second;
+        health[entity] = healthComponent;
     }
 
-    ColliderComponent*
-    GetCollider(Entity entity)
+    void AddEnemy(
+        Entity entity,
+        const EnemyComponent& enemy
+    )
     {
-        auto it =
-            colliders.find(entity);
-
-        if (it == colliders.end())
-        {
-            return nullptr;
-        }
-
-        return &it->second;
+        enemies[entity] = enemy;
     }
 
-    SpriteComponent*
-    GetSprite(Entity entity)
+    TransformComponent* GetTransform(Entity entity)
     {
-        auto it =
-            sprites.find(entity);
-
-        if (it == sprites.end())
-        {
-            return nullptr;
-        }
-
-        return &it->second;
+        auto it = transforms.find(entity);
+        return it == transforms.end() ? nullptr : &it->second;
     }
 
-    AnimationComponent*
-    GetAnimation(Entity entity)
+    VelocityComponent* GetVelocity(Entity entity)
     {
-        auto it =
-            animations.find(entity);
+        auto it = velocities.find(entity);
+        return it == velocities.end() ? nullptr : &it->second;
+    }
 
-        if (it == animations.end())
-        {
-            return nullptr;
-        }
+    ColliderComponent* GetCollider(Entity entity)
+    {
+        auto it = colliders.find(entity);
+        return it == colliders.end() ? nullptr : &it->second;
+    }
 
-        return &it->second;
+    SpriteComponent* GetSprite(Entity entity)
+    {
+        auto it = sprites.find(entity);
+        return it == sprites.end() ? nullptr : &it->second;
+    }
+
+    AnimationComponent* GetAnimation(Entity entity)
+    {
+        auto it = animations.find(entity);
+        return it == animations.end() ? nullptr : &it->second;
+    }
+
+    ProjectileComponent* GetProjectile(Entity entity)
+    {
+        auto it = projectiles.find(entity);
+        return it == projectiles.end() ? nullptr : &it->second;
+    }
+
+    HealthComponent* GetHealth(Entity entity)
+    {
+        auto it = health.find(entity);
+        return it == health.end() ? nullptr : &it->second;
+    }
+
+    EnemyComponent* GetEnemy(Entity entity)
+    {
+        auto it = enemies.find(entity);
+        return it == enemies.end() ? nullptr : &it->second;
     }
 
 private:
     Entity nextEntity = 0;
 
-    std::unordered_map<
-        Entity,
-        TransformComponent
-    > transforms;
-
-    std::unordered_map<
-        Entity,
-        VelocityComponent
-    > velocities;
-
-    std::unordered_map<
-        Entity,
-        ColliderComponent
-    > colliders;
-
-    std::unordered_map<
-        Entity,
-        SpriteComponent
-    > sprites;
-
-    std::unordered_map<
-        Entity,
-        AnimationComponent
-    > animations;
+    std::unordered_map<Entity, TransformComponent> transforms;
+    std::unordered_map<Entity, VelocityComponent> velocities;
+    std::unordered_map<Entity, ColliderComponent> colliders;
+    std::unordered_map<Entity, SpriteComponent> sprites;
+    std::unordered_map<Entity, AnimationComponent> animations;
+    std::unordered_map<Entity, ProjectileComponent> projectiles;
+    std::unordered_map<Entity, HealthComponent> health;
+    std::unordered_map<Entity, EnemyComponent> enemies;
 };
