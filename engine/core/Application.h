@@ -2,11 +2,16 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstddef>
 #include <vector>
 
-#include "engine/renderer/Renderer.h"
-#include "engine/input/Input.h"
+#include "engine/arena/ArenaManager.h"
+#include "engine/audio/AudioSystem.h"
+#include "engine/core/GameState.h"
+#include "engine/effects/GameFeel.h"
 #include "engine/ecs/Registry.h"
+#include "engine/input/Input.h"
+#include "engine/renderer/Renderer.h"
 #include "engine/resources/TextureManager.h"
 #include "engine/world/Camera.h"
 
@@ -25,6 +30,9 @@ private:
     void Update(float deltaTime);
     void Render();
 
+    void ResetGame();
+    void CreateWorld();
+    void UpdateArena(float deltaTime);
     void UpdatePlayer(float deltaTime);
     void UpdateBullets(float deltaTime);
     void UpdateEnemies(float deltaTime);
@@ -32,6 +40,12 @@ private:
 
     void SpawnBullet();
     void SpawnEnemy(float x, float y);
+    void SpawnEnemyAtArenaEdge();
+
+    void RenderGrid(float shakeX, float shakeY);
+    void RenderWorld(float shakeX, float shakeY);
+    void RenderUI();
+    void UpdateWindowTitle();
 
 private:
     static constexpr float ScreenWidth = 1280.0f;
@@ -46,6 +60,9 @@ private:
     TextureManager textureManager;
     Registry registry;
     Camera camera;
+    ArenaManager arena;
+    AudioSystem audio;
+    GameFeel gameFeel;
 
     Entity player;
     Entity obstacle;
@@ -53,8 +70,12 @@ private:
     std::vector<Entity> bullets;
     std::vector<Entity> enemies;
 
+    GameState gameState;
     bool running;
     Uint64 lastFrameTime;
 
     float shootCooldown;
+    std::size_t spawnIndex;
+    int lastAnnouncedWave;
+    int score;
 };
