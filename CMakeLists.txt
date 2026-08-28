@@ -24,14 +24,11 @@ add_executable(
     game/main.cpp
 
     engine/core/Application.cpp
-
     engine/renderer/Renderer.cpp
-
     engine/input/Input.cpp
-
     engine/physics/Physics.cpp
-
     engine/resources/TextureManager.cpp
+    engine/world/Camera.cpp
 )
 
 target_include_directories(
