@@ -13,6 +13,15 @@ public:
     void Shutdown();
 
 private:
+    void ProcessInput();
+    void Update(float deltaTime);
+    void Render();
+
+private:
     SDL_Window* window;
+    SDL_Renderer* renderer;
+
     bool running;
+
+    Uint64 lastFrameTime;
 };
