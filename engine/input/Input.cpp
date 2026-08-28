@@ -7,6 +7,8 @@ Input::Input()
 
 void Input::Update()
 {
+    pressedKeys.clear();
+
     SDL_Event event;
 
     while (SDL_PollEvent(&event))
@@ -14,6 +16,13 @@ void Input::Update()
         if (event.type == SDL_EVENT_QUIT)
         {
             quitRequested = true;
+        }
+        else if (
+            event.type == SDL_EVENT_KEY_DOWN &&
+            !event.key.repeat
+        )
+        {
+            pressedKeys.insert(event.key.scancode);
         }
     }
 }
@@ -29,6 +38,11 @@ bool Input::IsKeyDown(SDL_Scancode key) const
         SDL_GetKeyboardState(nullptr);
 
     return keyboardState[key];
+}
+
+bool Input::WasKeyPressed(SDL_Scancode key) const
+{
+    return pressedKeys.contains(key);
 }
 
 bool Input::IsMouseButtonDown(Uint32 buttonMask) const
