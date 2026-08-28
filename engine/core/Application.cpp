@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <sstream>
 #include <unordered_set>
 
 Application::Application()
@@ -12,9 +13,13 @@ Application::Application()
       camera(ScreenWidth, ScreenHeight),
       player(0),
       obstacle(0),
+      gameState(GameState::Playing),
       running(false),
       lastFrameTime(0),
-      shootCooldown(0.0f)
+      shootCooldown(0.0f),
+      spawnIndex(0),
+      lastAnnouncedWave(0),
+      score(0)
 {
 }
 
@@ -57,6 +62,10 @@ bool Application::Initialize()
         return false;
     }
 
+    // Audio is optional. The game remains playable on systems without an
+    // available playback device.
+    audio.Initialize();
+
     if (!textureManager.LoadTexture(
             renderer.GetSDLRenderer(),
             "player",
@@ -69,8 +78,23 @@ bool Application::Initialize()
     }
 
     camera.SetWorldBounds(WorldWidth, WorldHeight);
+    arena.Reset();
+    gameFeel.Reset();
+    CreateWorld();
 
-    // Player
+    running = true;
+    lastFrameTime = SDL_GetPerformanceCounter();
+
+    std::cout << "Engine initialized successfully." << std::endl;
+    std::cout
+        << "Controls: WASD move, mouse aim, left click shoot, P pause, R restart after death, ESC quit."
+        << std::endl;
+
+    return true;
+}
+
+void Application::CreateWorld()
+{
     player = registry.CreateEntity();
 
     registry.AddTransform(
@@ -115,7 +139,6 @@ bool Application::Initialize()
         }
     );
 
-    // World obstacle
     obstacle = registry.CreateEntity();
 
     registry.AddTransform(
@@ -128,18 +151,8 @@ bool Application::Initialize()
         ColliderComponent{500.0f, 70.0f}
     );
 
-    // Enemy starting positions
-    SpawnEnemy(300.0f, 250.0f);
-    SpawnEnemy(2050.0f, 250.0f);
-    SpawnEnemy(300.0f, 1250.0f);
-    SpawnEnemy(2050.0f, 1250.0f);
-    SpawnEnemy(1150.0f, 250.0f);
-    SpawnEnemy(1150.0f, 1320.0f);
-
-    TransformComponent* playerTransform =
-        registry.GetTransform(player);
-    ColliderComponent* playerCollider =
-        registry.GetCollider(player);
+    TransformComponent* playerTransform = registry.GetTransform(player);
+    ColliderComponent* playerCollider = registry.GetCollider(player);
 
     if (playerTransform && playerCollider)
     {
@@ -150,27 +163,43 @@ bool Application::Initialize()
             playerCollider->height
         );
     }
+}
 
-    running = true;
-    lastFrameTime = SDL_GetPerformanceCounter();
+void Application::ResetGame()
+{
+    for (Entity bullet : bullets)
+    {
+        registry.DestroyEntity(bullet);
+    }
 
-    std::cout
-        << "Engine initialized successfully."
-        << std::endl;
-    std::cout
-        << "Controls: WASD move, mouse aim, left click shoot, ESC quit."
-        << std::endl;
+    for (Entity enemy : enemies)
+    {
+        registry.DestroyEntity(enemy);
+    }
 
-    return true;
+    bullets.clear();
+    enemies.clear();
+
+    registry.DestroyEntity(player);
+    registry.DestroyEntity(obstacle);
+
+    arena.Reset();
+    gameFeel.Reset();
+
+    shootCooldown = 0.0f;
+    spawnIndex = 0;
+    lastAnnouncedWave = 0;
+    score = 0;
+    gameState = GameState::Playing;
+
+    CreateWorld();
 }
 
 void Application::Run()
 {
     while (running)
     {
-        const Uint64 currentFrameTime =
-            SDL_GetPerformanceCounter();
-
+        const Uint64 currentFrameTime = SDL_GetPerformanceCounter();
         const double frequency =
             static_cast<double>(SDL_GetPerformanceFrequency());
 
@@ -179,8 +208,6 @@ void Application::Run()
         );
 
         lastFrameTime = currentFrameTime;
-
-        // Prevent giant physics jumps after a breakpoint or window stall.
         deltaTime = std::min(deltaTime, 0.05f);
 
         ProcessInput();
@@ -196,31 +223,59 @@ void Application::ProcessInput()
     if (input.ShouldQuit() || input.IsKeyDown(SDL_SCANCODE_ESCAPE))
     {
         running = false;
+        return;
+    }
+
+    if (
+        input.WasKeyPressed(SDL_SCANCODE_P) &&
+        gameState != GameState::GameOver
+    )
+    {
+        gameState =
+            gameState == GameState::Paused
+                ? GameState::Playing
+                : GameState::Paused;
+    }
+
+    if (
+        input.WasKeyPressed(SDL_SCANCODE_R) &&
+        gameState == GameState::GameOver
+    )
+    {
+        ResetGame();
     }
 }
 
 void Application::Update(float deltaTime)
 {
+    gameFeel.Update(deltaTime);
+
+    if (gameState != GameState::Playing)
+    {
+        UpdateWindowTitle();
+        return;
+    }
+
     if (shootCooldown > 0.0f)
     {
         shootCooldown -= deltaTime;
     }
 
+    UpdateArena(deltaTime);
     UpdatePlayer(deltaTime);
-
-    if (!running)
-    {
-        return;
-    }
-
     UpdateEnemies(deltaTime);
     UpdateBullets(deltaTime);
     UpdatePlayerAnimation(deltaTime);
 
-    TransformComponent* playerTransform =
-        registry.GetTransform(player);
-    ColliderComponent* playerCollider =
-        registry.GetCollider(player);
+    HealthComponent* playerHealth = registry.GetHealth(player);
+
+    if (playerHealth && playerHealth->current <= 0)
+    {
+        gameState = GameState::GameOver;
+    }
+
+    TransformComponent* playerTransform = registry.GetTransform(player);
+    ColliderComponent* playerCollider = registry.GetCollider(player);
 
     if (playerTransform && playerCollider)
     {
@@ -231,28 +286,64 @@ void Application::Update(float deltaTime)
             playerCollider->height
         );
     }
+
+    UpdateWindowTitle();
+}
+
+void Application::UpdateArena(float deltaTime)
+{
+    arena.Update(deltaTime, enemies.size());
+
+    if (
+        arena.GetWave() > 0 &&
+        arena.GetWave() != lastAnnouncedWave
+    )
+    {
+        lastAnnouncedWave = arena.GetWave();
+        audio.PlayWaveStart();
+        std::cout << "Wave " << lastAnnouncedWave << " started." << std::endl;
+    }
+
+    while (arena.ShouldSpawnEnemy())
+    {
+        SpawnEnemyAtArenaEdge();
+    }
+}
+
+void Application::SpawnEnemyAtArenaEdge()
+{
+    static constexpr float positions[][2] = {
+        {90.0f, 90.0f},
+        {1150.0f, 90.0f},
+        {2260.0f, 90.0f},
+        {90.0f, 760.0f},
+        {2260.0f, 760.0f},
+        {90.0f, 1460.0f},
+        {1150.0f, 1460.0f},
+        {2260.0f, 1460.0f}
+    };
+
+    constexpr std::size_t positionCount =
+        sizeof(positions) / sizeof(positions[0]);
+
+    const std::size_t index = spawnIndex % positionCount;
+    ++spawnIndex;
+
+    SpawnEnemy(
+        positions[index][0],
+        positions[index][1]
+    );
 }
 
 void Application::UpdatePlayer(float deltaTime)
 {
-    TransformComponent* transform =
-        registry.GetTransform(player);
-    VelocityComponent* velocity =
-        registry.GetVelocity(player);
-    ColliderComponent* collider =
-        registry.GetCollider(player);
-    HealthComponent* health =
-        registry.GetHealth(player);
+    TransformComponent* transform = registry.GetTransform(player);
+    VelocityComponent* velocity = registry.GetVelocity(player);
+    ColliderComponent* collider = registry.GetCollider(player);
+    HealthComponent* health = registry.GetHealth(player);
 
     if (!transform || !velocity || !collider || !health)
     {
-        return;
-    }
-
-    if (health->current <= 0)
-    {
-        std::cout << "Game Over" << std::endl;
-        running = false;
         return;
     }
 
@@ -267,17 +358,14 @@ void Application::UpdatePlayer(float deltaTime)
     {
         velocity->y -= playerSpeed;
     }
-
     if (input.IsKeyDown(SDL_SCANCODE_S))
     {
         velocity->y += playerSpeed;
     }
-
     if (input.IsKeyDown(SDL_SCANCODE_A))
     {
         velocity->x -= playerSpeed;
     }
-
     if (input.IsKeyDown(SDL_SCANCODE_D))
     {
         velocity->x += playerSpeed;
@@ -305,10 +393,8 @@ void Application::UpdatePlayer(float deltaTime)
         WorldHeight - collider->height
     );
 
-    TransformComponent* obstacleTransform =
-        registry.GetTransform(obstacle);
-    ColliderComponent* obstacleCollider =
-        registry.GetCollider(obstacle);
+    TransformComponent* obstacleTransform = registry.GetTransform(obstacle);
+    ColliderComponent* obstacleCollider = registry.GetCollider(obstacle);
 
     if (
         obstacleTransform &&
@@ -339,15 +425,15 @@ void Application::UpdatePlayer(float deltaTime)
     {
         SpawnBullet();
         shootCooldown = 0.16f;
+        audio.PlayShoot();
+        gameFeel.TriggerShoot();
     }
 }
 
 void Application::SpawnBullet()
 {
-    TransformComponent* playerTransform =
-        registry.GetTransform(player);
-    ColliderComponent* playerCollider =
-        registry.GetCollider(player);
+    TransformComponent* playerTransform = registry.GetTransform(player);
+    ColliderComponent* playerCollider = registry.GetCollider(player);
 
     if (!playerTransform || !playerCollider)
     {
@@ -420,21 +506,15 @@ void Application::UpdateBullets(float deltaTime)
     std::unordered_set<Entity> deadBullets;
     std::unordered_set<Entity> deadEnemies;
 
-    TransformComponent* obstacleTransform =
-        registry.GetTransform(obstacle);
-    ColliderComponent* obstacleCollider =
-        registry.GetCollider(obstacle);
+    TransformComponent* obstacleTransform = registry.GetTransform(obstacle);
+    ColliderComponent* obstacleCollider = registry.GetCollider(obstacle);
 
     for (Entity bullet : bullets)
     {
-        TransformComponent* transform =
-            registry.GetTransform(bullet);
-        VelocityComponent* velocity =
-            registry.GetVelocity(bullet);
-        ColliderComponent* collider =
-            registry.GetCollider(bullet);
-        ProjectileComponent* projectile =
-            registry.GetProjectile(bullet);
+        TransformComponent* transform = registry.GetTransform(bullet);
+        VelocityComponent* velocity = registry.GetVelocity(bullet);
+        ColliderComponent* collider = registry.GetCollider(bullet);
+        ProjectileComponent* projectile = registry.GetProjectile(bullet);
 
         if (!transform || !velocity || !collider || !projectile)
         {
@@ -475,12 +555,9 @@ void Application::UpdateBullets(float deltaTime)
                 continue;
             }
 
-            TransformComponent* enemyTransform =
-                registry.GetTransform(enemy);
-            ColliderComponent* enemyCollider =
-                registry.GetCollider(enemy);
-            HealthComponent* enemyHealth =
-                registry.GetHealth(enemy);
+            TransformComponent* enemyTransform = registry.GetTransform(enemy);
+            ColliderComponent* enemyCollider = registry.GetCollider(enemy);
+            HealthComponent* enemyHealth = registry.GetHealth(enemy);
 
             if (!enemyTransform || !enemyCollider || !enemyHealth)
             {
@@ -496,10 +573,13 @@ void Application::UpdateBullets(float deltaTime)
             {
                 enemyHealth->current -= projectile->damage;
                 deadBullets.insert(bullet);
+                gameFeel.TriggerHit();
+                audio.PlayHit();
 
                 if (enemyHealth->current <= 0)
                 {
                     deadEnemies.insert(enemy);
+                    score += 100;
                 }
 
                 break;
@@ -537,6 +617,7 @@ void Application::UpdateBullets(float deltaTime)
 void Application::SpawnEnemy(float x, float y)
 {
     const Entity enemy = registry.CreateEntity();
+    const int health = arena.GetEnemyHealth();
 
     registry.AddTransform(
         enemy,
@@ -555,13 +636,13 @@ void Application::SpawnEnemy(float x, float y)
 
     registry.AddHealth(
         enemy,
-        HealthComponent{3, 3}
+        HealthComponent{health, health}
     );
 
     registry.AddEnemy(
         enemy,
         EnemyComponent{
-            120.0f,
+            arena.GetEnemySpeed(),
             1,
             0.75f,
             0.0f
@@ -573,17 +654,12 @@ void Application::SpawnEnemy(float x, float y)
 
 void Application::UpdateEnemies(float deltaTime)
 {
-    TransformComponent* playerTransform =
-        registry.GetTransform(player);
-    ColliderComponent* playerCollider =
-        registry.GetCollider(player);
-    HealthComponent* playerHealth =
-        registry.GetHealth(player);
+    TransformComponent* playerTransform = registry.GetTransform(player);
+    ColliderComponent* playerCollider = registry.GetCollider(player);
+    HealthComponent* playerHealth = registry.GetHealth(player);
 
-    TransformComponent* obstacleTransform =
-        registry.GetTransform(obstacle);
-    ColliderComponent* obstacleCollider =
-        registry.GetCollider(obstacle);
+    TransformComponent* obstacleTransform = registry.GetTransform(obstacle);
+    ColliderComponent* obstacleCollider = registry.GetCollider(obstacle);
 
     if (!playerTransform || !playerCollider || !playerHealth)
     {
@@ -597,14 +673,10 @@ void Application::UpdateEnemies(float deltaTime)
 
     for (Entity enemy : enemies)
     {
-        TransformComponent* transform =
-            registry.GetTransform(enemy);
-        VelocityComponent* velocity =
-            registry.GetVelocity(enemy);
-        ColliderComponent* collider =
-            registry.GetCollider(enemy);
-        EnemyComponent* enemyData =
-            registry.GetEnemy(enemy);
+        TransformComponent* transform = registry.GetTransform(enemy);
+        VelocityComponent* velocity = registry.GetVelocity(enemy);
+        ColliderComponent* collider = registry.GetCollider(enemy);
+        EnemyComponent* enemyData = registry.GetEnemy(enemy);
 
         if (!transform || !velocity || !collider || !enemyData)
         {
@@ -635,7 +707,6 @@ void Application::UpdateEnemies(float deltaTime)
         {
             directionX /= length;
             directionY /= length;
-
             velocity->x = directionX * enemyData->moveSpeed;
             velocity->y = directionY * enemyData->moveSpeed;
         }
@@ -675,31 +746,28 @@ void Application::UpdateEnemies(float deltaTime)
             transform->y = previousY;
         }
 
-        if (
-            Physics::CheckCollision(
+        if (Physics::CheckCollision(
                 *transform,
                 *collider,
                 *playerTransform,
                 *playerCollider
-            ) &&
-            enemyData->attackTimer <= 0.0f
-        )
+            ))
         {
-            playerHealth->current -= enemyData->contactDamage;
-            enemyData->attackTimer = enemyData->attackCooldown;
+            transform->x = previousX;
+            transform->y = previousY;
 
-            std::cout
-                << "Player health: "
-                << playerHealth->current
-                << "/"
-                << playerHealth->maximum
-                << std::endl;
-
-            if (playerHealth->current <= 0)
+            if (enemyData->attackTimer <= 0.0f)
             {
-                std::cout << "Game Over" << std::endl;
-                running = false;
-                return;
+                playerHealth->current -= enemyData->contactDamage;
+                enemyData->attackTimer = enemyData->attackCooldown;
+                gameFeel.TriggerPlayerDamage();
+                audio.PlayPlayerDamage();
+
+                if (playerHealth->current <= 0)
+                {
+                    gameState = GameState::GameOver;
+                    return;
+                }
             }
         }
     }
@@ -707,13 +775,23 @@ void Application::UpdateEnemies(float deltaTime)
 
 void Application::UpdatePlayerAnimation(float deltaTime)
 {
-    SpriteComponent* sprite =
-        registry.GetSprite(player);
-    AnimationComponent* animation =
-        registry.GetAnimation(player);
+    SpriteComponent* sprite = registry.GetSprite(player);
+    AnimationComponent* animation = registry.GetAnimation(player);
+    VelocityComponent* velocity = registry.GetVelocity(player);
 
-    if (!sprite || !animation)
+    if (!sprite || !animation || !velocity)
     {
+        return;
+    }
+
+    const bool moving =
+        std::abs(velocity->x) > 0.01f ||
+        std::abs(velocity->y) > 0.01f;
+
+    if (!moving)
+    {
+        sprite->currentFrame = 0;
+        animation->elapsedTime = 0.0f;
         return;
     }
 
@@ -722,30 +800,26 @@ void Application::UpdatePlayerAnimation(float deltaTime)
     while (animation->elapsedTime >= animation->frameDuration)
     {
         animation->elapsedTime -= animation->frameDuration;
-        sprite->currentFrame++;
+        ++sprite->currentFrame;
 
         if (sprite->currentFrame >= animation->frameCount)
         {
-            sprite->currentFrame =
-                animation->looping
-                    ? 0
-                    : animation->frameCount - 1;
+            sprite->currentFrame = animation->looping
+                ? 0
+                : animation->frameCount - 1;
         }
     }
 }
 
-void Application::Render()
+void Application::RenderGrid(float shakeX, float shakeY)
 {
-    renderer.BeginFrame();
-
-    // World grid
-    renderer.SetDrawColor(38, 38, 52);
-
     constexpr float gridSize = 100.0f;
 
-    for (float worldX = 0.0f; worldX <= WorldWidth; worldX += gridSize)
+    renderer.SetDrawColor(38, 38, 52);
+
+    for (float x = 0.0f; x <= WorldWidth; x += gridSize)
     {
-        const float screenX = camera.WorldToScreenX(worldX);
+        const float screenX = camera.WorldToScreenX(x) + shakeX;
 
         if (screenX >= 0.0f && screenX <= ScreenWidth)
         {
@@ -758,9 +832,9 @@ void Application::Render()
         }
     }
 
-    for (float worldY = 0.0f; worldY <= WorldHeight; worldY += gridSize)
+    for (float y = 0.0f; y <= WorldHeight; y += gridSize)
     {
-        const float screenY = camera.WorldToScreenY(worldY);
+        const float screenY = camera.WorldToScreenY(y) + shakeY;
 
         if (screenY >= 0.0f && screenY <= ScreenHeight)
         {
@@ -772,196 +846,298 @@ void Application::Render()
             );
         }
     }
+}
 
-    // Obstacle
-    TransformComponent* obstacleTransform =
-        registry.GetTransform(obstacle);
-    ColliderComponent* obstacleCollider =
-        registry.GetCollider(obstacle);
+void Application::RenderWorld(float shakeX, float shakeY)
+{
+    TransformComponent* obstacleTransform = registry.GetTransform(obstacle);
+    ColliderComponent* obstacleCollider = registry.GetCollider(obstacle);
 
     if (obstacleTransform && obstacleCollider)
     {
         renderer.SetDrawColor(80, 80, 100);
         renderer.FillRectangle(
-            camera.WorldToScreenX(obstacleTransform->x),
-            camera.WorldToScreenY(obstacleTransform->y),
+            camera.WorldToScreenX(obstacleTransform->x) + shakeX,
+            camera.WorldToScreenY(obstacleTransform->y) + shakeY,
             obstacleCollider->width,
             obstacleCollider->height
         );
     }
 
-    // Bullets
-    renderer.SetDrawColor(255, 205, 70);
+    renderer.SetDrawColor(245, 210, 65);
 
     for (Entity bullet : bullets)
     {
-        TransformComponent* transform =
-            registry.GetTransform(bullet);
-        ColliderComponent* collider =
-            registry.GetCollider(bullet);
+        TransformComponent* transform = registry.GetTransform(bullet);
+        ColliderComponent* collider = registry.GetCollider(bullet);
 
         if (transform && collider)
         {
             renderer.FillRectangle(
-                camera.WorldToScreenX(transform->x),
-                camera.WorldToScreenY(transform->y),
+                camera.WorldToScreenX(transform->x) + shakeX,
+                camera.WorldToScreenY(transform->y) + shakeY,
                 collider->width,
                 collider->height
             );
         }
     }
 
-    // Enemies
     for (Entity enemy : enemies)
     {
-        TransformComponent* transform =
-            registry.GetTransform(enemy);
-        ColliderComponent* collider =
-            registry.GetCollider(enemy);
-        HealthComponent* health =
-            registry.GetHealth(enemy);
+        TransformComponent* transform = registry.GetTransform(enemy);
+        ColliderComponent* collider = registry.GetCollider(enemy);
+        HealthComponent* health = registry.GetHealth(enemy);
 
-        if (!transform || !collider || !health)
+        if (!transform || !collider)
         {
             continue;
         }
 
-        renderer.SetDrawColor(210, 65, 65);
+        const float screenX = camera.WorldToScreenX(transform->x) + shakeX;
+        const float screenY = camera.WorldToScreenY(transform->y) + shakeY;
+
+        renderer.SetDrawColor(205, 62, 72);
         renderer.FillRectangle(
-            camera.WorldToScreenX(transform->x),
-            camera.WorldToScreenY(transform->y),
+            screenX,
+            screenY,
             collider->width,
             collider->height
         );
 
-        const float healthRatio = std::clamp(
+        if (health && health->maximum > 0)
+        {
+            const float ratio = std::clamp(
+                static_cast<float>(health->current) /
+                    static_cast<float>(health->maximum),
+                0.0f,
+                1.0f
+            );
+
+            renderer.SetDrawColor(45, 45, 50);
+            renderer.FillRectangle(
+                screenX,
+                screenY - 8.0f,
+                collider->width,
+                4.0f
+            );
+
+            renderer.SetDrawColor(90, 220, 105);
+            renderer.FillRectangle(
+                screenX,
+                screenY - 8.0f,
+                collider->width * ratio,
+                4.0f
+            );
+        }
+    }
+
+    TransformComponent* playerTransform = registry.GetTransform(player);
+    ColliderComponent* playerCollider = registry.GetCollider(player);
+    SpriteComponent* playerSprite = registry.GetSprite(player);
+
+    if (!playerTransform || !playerCollider)
+    {
+        return;
+    }
+
+    const float playerScreenX =
+        camera.WorldToScreenX(playerTransform->x) + shakeX;
+    const float playerScreenY =
+        camera.WorldToScreenY(playerTransform->y) + shakeY;
+
+    SDL_Texture* playerTexture = nullptr;
+
+    if (playerSprite)
+    {
+        playerTexture = textureManager.GetTexture(playerSprite->textureId);
+    }
+
+    if (playerSprite && playerTexture)
+    {
+        SDL_FRect source{
+            static_cast<float>(
+                playerSprite->currentFrame * playerSprite->frameWidth
+            ),
+            0.0f,
+            static_cast<float>(playerSprite->frameWidth),
+            static_cast<float>(playerSprite->frameHeight)
+        };
+
+        SDL_FRect destination{
+            playerScreenX,
+            playerScreenY,
+            playerSprite->width,
+            playerSprite->height
+        };
+
+        renderer.DrawTexture(
+            playerTexture,
+            &source,
+            &destination
+        );
+    }
+    else
+    {
+        renderer.SetDrawColor(235, 235, 245);
+        renderer.FillRectangle(
+            playerScreenX,
+            playerScreenY,
+            playerCollider->width,
+            playerCollider->height
+        );
+    }
+}
+
+void Application::RenderUI()
+{
+    HealthComponent* health = registry.GetHealth(player);
+
+    if (health && health->maximum > 0)
+    {
+        const float ratio = std::clamp(
             static_cast<float>(health->current) /
                 static_cast<float>(health->maximum),
             0.0f,
             1.0f
         );
 
-        renderer.SetDrawColor(30, 30, 30);
-        renderer.FillRectangle(
-            camera.WorldToScreenX(transform->x),
-            camera.WorldToScreenY(transform->y) - 8.0f,
-            collider->width,
-            4.0f
-        );
+        renderer.SetDrawColor(35, 35, 42);
+        renderer.FillRectangle(20.0f, 20.0f, 220.0f, 18.0f);
 
-        renderer.SetDrawColor(90, 220, 110);
-        renderer.FillRectangle(
-            camera.WorldToScreenX(transform->x),
-            camera.WorldToScreenY(transform->y) - 8.0f,
-            collider->width * healthRatio,
-            4.0f
-        );
+        renderer.SetDrawColor(75, 215, 105);
+        renderer.FillRectangle(20.0f, 20.0f, 220.0f * ratio, 18.0f);
+
+        renderer.SetDrawColor(225, 225, 235);
+        renderer.DrawRectangle(20.0f, 20.0f, 220.0f, 18.0f);
     }
 
-    // Player
-    TransformComponent* playerTransform =
-        registry.GetTransform(player);
-    ColliderComponent* playerCollider =
-        registry.GetCollider(player);
-    SpriteComponent* playerSprite =
-        registry.GetSprite(player);
+    const int waveBlocks = std::min(arena.GetWave(), 12);
 
-    if (playerTransform && playerCollider)
+    for (int i = 0; i < waveBlocks; ++i)
     {
-        const float screenX =
-            camera.WorldToScreenX(playerTransform->x);
-        const float screenY =
-            camera.WorldToScreenY(playerTransform->y);
-
-        SDL_Texture* playerTexture = nullptr;
-
-        if (playerSprite)
-        {
-            playerTexture = textureManager.GetTexture(
-                playerSprite->textureId
-            );
-        }
-
-        if (playerTexture && playerSprite)
-        {
-            SDL_FRect source{
-                static_cast<float>(
-                    playerSprite->currentFrame *
-                    playerSprite->frameWidth
-                ),
-                0.0f,
-                static_cast<float>(playerSprite->frameWidth),
-                static_cast<float>(playerSprite->frameHeight)
-            };
-
-            SDL_FRect destination{
-                screenX,
-                screenY,
-                playerSprite->width,
-                playerSprite->height
-            };
-
-            renderer.DrawTexture(
-                playerTexture,
-                &source,
-                &destination
-            );
-        }
-        else
-        {
-            renderer.SetDrawColor(235, 235, 245);
-            renderer.FillRectangle(
-                screenX,
-                screenY,
-                playerCollider->width,
-                playerCollider->height
-            );
-        }
-
-        // Aim line
-        float mouseX = 0.0f;
-        float mouseY = 0.0f;
-        input.GetMousePosition(mouseX, mouseY);
-
-        renderer.SetDrawColor(120, 180, 255);
-        renderer.DrawLine(
-            screenX + playerCollider->width * 0.5f,
-            screenY + playerCollider->height * 0.5f,
-            mouseX,
-            mouseY
-        );
-    }
-
-    // Player health bar (screen-space UI preview)
-    HealthComponent* playerHealth =
-        registry.GetHealth(player);
-
-    if (playerHealth)
-    {
-        const float healthRatio = std::clamp(
-            static_cast<float>(playerHealth->current) /
-                static_cast<float>(playerHealth->maximum),
-            0.0f,
-            1.0f
-        );
-
-        renderer.SetDrawColor(45, 45, 55);
-        renderer.FillRectangle(20.0f, 20.0f, 220.0f, 22.0f);
-
-        renderer.SetDrawColor(90, 220, 110);
+        renderer.SetDrawColor(120, 155, 255);
         renderer.FillRectangle(
-            23.0f,
-            23.0f,
-            214.0f * healthRatio,
-            16.0f
+            520.0f + static_cast<float>(i) * 20.0f,
+            20.0f,
+            14.0f,
+            14.0f
         );
     }
+
+    float mouseX = 0.0f;
+    float mouseY = 0.0f;
+    input.GetMousePosition(mouseX, mouseY);
+
+    renderer.SetDrawColor(245, 245, 245);
+    renderer.DrawLine(mouseX - 8.0f, mouseY, mouseX + 8.0f, mouseY);
+    renderer.DrawLine(mouseX, mouseY - 8.0f, mouseX, mouseY + 8.0f);
+
+    SDL_Renderer* rawRenderer = renderer.GetSDLRenderer();
+    SDL_SetRenderDrawBlendMode(rawRenderer, SDL_BLENDMODE_BLEND);
+
+    const float hitAlpha = gameFeel.GetHitFlashAlpha();
+    if (hitAlpha > 0.0f)
+    {
+        SDL_SetRenderDrawColor(
+            rawRenderer,
+            255,
+            255,
+            255,
+            static_cast<Uint8>(hitAlpha * 55.0f)
+        );
+        const SDL_FRect overlay{0.0f, 0.0f, ScreenWidth, ScreenHeight};
+        SDL_RenderFillRect(rawRenderer, &overlay);
+    }
+
+    const float damageAlpha = gameFeel.GetDamageFlashAlpha();
+    if (damageAlpha > 0.0f)
+    {
+        SDL_SetRenderDrawColor(
+            rawRenderer,
+            220,
+            30,
+            35,
+            static_cast<Uint8>(damageAlpha * 110.0f)
+        );
+        const SDL_FRect overlay{0.0f, 0.0f, ScreenWidth, ScreenHeight};
+        SDL_RenderFillRect(rawRenderer, &overlay);
+    }
+
+    if (gameState == GameState::Paused)
+    {
+        SDL_SetRenderDrawColor(rawRenderer, 10, 10, 16, 175);
+        const SDL_FRect overlay{0.0f, 0.0f, ScreenWidth, ScreenHeight};
+        SDL_RenderFillRect(rawRenderer, &overlay);
+
+        renderer.SetDrawColor(230, 230, 240);
+        renderer.DrawRectangle(490.0f, 270.0f, 300.0f, 180.0f);
+    }
+    else if (gameState == GameState::GameOver)
+    {
+        SDL_SetRenderDrawColor(rawRenderer, 55, 5, 8, 185);
+        const SDL_FRect overlay{0.0f, 0.0f, ScreenWidth, ScreenHeight};
+        SDL_RenderFillRect(rawRenderer, &overlay);
+
+        renderer.SetDrawColor(245, 95, 95);
+        renderer.DrawRectangle(430.0f, 240.0f, 420.0f, 240.0f);
+    }
+
+    SDL_SetRenderDrawBlendMode(rawRenderer, SDL_BLENDMODE_NONE);
+}
+
+void Application::Render()
+{
+    renderer.BeginFrame();
+
+    const float shakeX = gameFeel.GetShakeX();
+    const float shakeY = gameFeel.GetShakeY();
+
+    RenderGrid(shakeX, shakeY);
+    RenderWorld(shakeX, shakeY);
+    RenderUI();
 
     renderer.EndFrame();
 }
 
+void Application::UpdateWindowTitle()
+{
+    if (!window)
+    {
+        return;
+    }
+
+    HealthComponent* health = registry.GetHealth(player);
+    const int currentHealth = health ? std::max(0, health->current) : 0;
+    const int maxHealth = health ? health->maximum : 0;
+
+    std::ostringstream title;
+    title
+        << "Arena Engine | Wave "
+        << arena.GetWave()
+        << " | HP "
+        << currentHealth
+        << "/"
+        << maxHealth
+        << " | Enemies "
+        << enemies.size()
+        << " | Score "
+        << score;
+
+    if (gameState == GameState::Paused)
+    {
+        title << " | PAUSED - press P to resume";
+    }
+    else if (gameState == GameState::GameOver)
+    {
+        title << " | GAME OVER - press R to restart";
+    }
+
+    SDL_SetWindowTitle(window, title.str().c_str());
+}
+
 void Application::Shutdown()
 {
+    audio.Shutdown();
     textureManager.Shutdown();
     renderer.Shutdown();
 
