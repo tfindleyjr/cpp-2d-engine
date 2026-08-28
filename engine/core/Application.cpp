@@ -5,7 +5,9 @@
 Application::Application()
     : window(nullptr),
       running(false),
-      lastFrameTime(0)
+      lastFrameTime(0),
+      playerX(600.0f),
+      playerY(340.0f)
 {
 }
 
@@ -92,26 +94,70 @@ void Application::Run()
 
 void Application::ProcessInput()
 {
-    SDL_Event event;
+    input.Update();
 
-    while (SDL_PollEvent(&event))
+    if (input.ShouldQuit())
     {
-        if (event.type == SDL_EVENT_QUIT)
-        {
-            running = false;
-        }
+        running = false;
+    }
+
+    if (input.IsKeyDown(SDL_SCANCODE_ESCAPE))
+    {
+        running = false;
     }
 }
 
 void Application::Update(float deltaTime)
 {
-    (void)deltaTime;
+    const float playerSpeed = 300.0f;
+    const float playerSize = 50.0f;
+
+    if (input.IsKeyDown(SDL_SCANCODE_W))
+    {
+        playerY -= playerSpeed * deltaTime;
+    }
+
+    if (input.IsKeyDown(SDL_SCANCODE_S))
+    {
+        playerY += playerSpeed * deltaTime;
+    }
+
+    if (input.IsKeyDown(SDL_SCANCODE_A))
+    {
+        playerX -= playerSpeed * deltaTime;
+    }
+
+    if (input.IsKeyDown(SDL_SCANCODE_D))
+    {
+        playerX += playerSpeed * deltaTime;
+    }
+
+    if (playerX < 0.0f)
+    {
+        playerX = 0.0f;
+    }
+
+    if (playerY < 0.0f)
+    {
+        playerY = 0.0f;
+    }
+
+    if (playerX + playerSize > 1280.0f)
+    {
+        playerX = 1280.0f - playerSize;
+    }
+
+    if (playerY + playerSize > 720.0f)
+    {
+        playerY = 720.0f - playerSize;
+    }
 }
 
 void Application::Render()
 {
     renderer.BeginFrame();
 
+    // Player
     renderer.SetDrawColor(
         255,
         255,
@@ -119,12 +165,13 @@ void Application::Render()
     );
 
     renderer.FillRectangle(
-        540.0f,
-        300.0f,
-        200.0f,
-        120.0f
+        playerX,
+        playerY,
+        50.0f,
+        50.0f
     );
 
+    // Temporary enemy
     renderer.SetDrawColor(
         200,
         50,
@@ -134,8 +181,8 @@ void Application::Render()
     renderer.FillRectangle(
         100.0f,
         100.0f,
-        80.0f,
-        80.0f
+        50.0f,
+        50.0f
     );
 
     renderer.EndFrame();

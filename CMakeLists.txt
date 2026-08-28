@@ -16,6 +16,7 @@ add_executable(ArenaGame
     game/main.cpp
     engine/core/Application.cpp
     engine/renderer/Renderer.cpp
+    engine/input/Input.cpp
 )
 
 target_include_directories(ArenaGame

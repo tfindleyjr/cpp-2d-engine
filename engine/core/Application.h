@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 
 #include "engine/renderer/Renderer.h"
+#include "engine/input/Input.h"
 
 class Application
 {
@@ -21,8 +22,14 @@ private:
 
 private:
     SDL_Window* window;
+
     Renderer renderer;
+    Input input;
 
     bool running;
+
     Uint64 lastFrameTime;
+
+    float playerX;
+    float playerY;
 };
